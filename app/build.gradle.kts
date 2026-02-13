@@ -63,6 +63,9 @@ dependencies {
     // Icônes Material étendues pour les boutons de lecture
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
     
+    // Media pour les notifications de style média
+    implementation("androidx.media:media:1.7.0")
+    
     // Media3 pour la lecture audio moderne
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-session:1.2.1")

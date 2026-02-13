@@ -2,6 +2,7 @@ package com.example.audio.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +37,7 @@ fun SongItem(
     isPlaying: Boolean,
     onPlayClick: () -> Unit,
     onPauseClick: () -> Unit,
+    onSongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Animation pour agrandir légèrement la carte quand elle est en lecture
@@ -48,8 +50,9 @@ fun SongItem(
         modifier = modifier
             .fillMaxWidth()
             .scale(scale)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable { onSongClick() },
+    shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MusicCard
         ),

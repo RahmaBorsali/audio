@@ -33,8 +33,9 @@ fun AudioPlayerScreen(
     currentPlayingSongId: Int?,
     onPlayClick: (Song) -> Unit,
     onPauseClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+    onSongClick: (Song) -> Unit,
+    modifier: Modifier = Modifier,
+    ) {
     Scaffold(
         topBar = {
             // Barre de titre avec gradient
@@ -99,7 +100,8 @@ fun AudioPlayerScreen(
                             song = song,
                             isPlaying = song.id == currentPlayingSongId,
                             onPlayClick = { onPlayClick(song) },
-                            onPauseClick = onPauseClick
+                            onPauseClick = onPauseClick,
+                            onSongClick = { onSongClick(song)}
                         )
                     }
                 }
@@ -107,3 +109,4 @@ fun AudioPlayerScreen(
         }
     }
 }
+
