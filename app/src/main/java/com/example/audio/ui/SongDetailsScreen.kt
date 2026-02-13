@@ -41,8 +41,10 @@ fun SongDetailsScreen(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
 ) {
-    val dur = durationMs.coerceAtLeast(1)
-    val pos = positionMs.coerceIn(0, dur)
+    val sliderEnabled = durationMs > 0
+    val dur = if (durationMs > 0) durationMs else 1
+    val pos = if (durationMs > 0) positionMs.coerceIn(0, dur) else 0
+
     val sliderValueFromPlayer = (pos.toFloat() / dur).coerceIn(0f, 1f)
 
     var userDragging by remember { mutableStateOf(false) }
@@ -100,11 +102,13 @@ fun SongDetailsScreen(
 
             Slider(
                 value = sliderUiValue,
+                enabled = sliderEnabled,
                 onValueChange = { v ->
                     userDragging = true
                     sliderUiValue = v
                 },
                 onValueChangeFinished = {
+                    if (!sliderEnabled) return@Slider
                     userDragging = false
                     onSeekTo((sliderUiValue * dur).roundToInt())
                 },
@@ -115,9 +119,17 @@ fun SongDetailsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                val shownPos = if (userDragging) (sliderUiValue * dur).roundToInt() else pos
+                val shownPos = if (sliderEnabled) {
+                    if (userDragging) (sliderUiValue * dur).roundToInt() else pos
+                } else 0
+
                 Text(formatTime(shownPos), color = Color.White.copy(alpha = 0.7f))
-                Text(formatTime(dur), color = Color.White.copy(alpha = 0.7f))
+
+                // ✅ si pas actif, afficher la durée du modèle
+                Text(
+                    if (sliderEnabled) formatTime(dur) else song.duration,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
             }
 
             Spacer(Modifier.height(28.dp))
@@ -140,7 +152,10 @@ fun SongDetailsScreen(
                         .background(Brush.verticalGradient(listOf(MusicPrimary, MusicSecondary))),
                     contentAlignment = Alignment.Center
                 ) {
-                    IconButton(onClick = { if (isPlaying) onPause() else onPlay() }, modifier = Modifier.size(74.dp)) {
+                    IconButton(
+                        onClick = { if (isPlaying) onPause() else onPlay() },
+                        modifier = Modifier.size(74.dp)
+                    ) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = "PlayPause",
@@ -169,7 +184,7 @@ fun SongDetailsScreen(
                     Spacer(Modifier.height(10.dp))
                     DetailRow("Titre", song.title)
                     DetailRow("Artiste", song.artist)
-                    DetailRow("Durée", formatTime(dur))
+                    DetailRow("Durée", if (durationMs > 0) formatTime(durationMs) else song.duration)
                 }
             }
         }

@@ -7,7 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -15,30 +15,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.audio.R
 import com.example.audio.data.Song
 import com.example.audio.ui.components.SongItem
 import com.example.audio.ui.theme.MusicBackground
 import com.example.audio.ui.theme.MusicPrimary
 import com.example.audio.ui.theme.MusicSecondary
 
-/**
- * Écran principal de l'application
- * Affiche la liste des chansons disponibles
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioPlayerScreen(
     songs: List<Song>,
-    currentPlayingSongId: Int?,
+    activeSongId: Int?,          // ✅ chanson chargée dans le service (même en pause)
+    isServicePlaying: Boolean,   // ✅ play/pause réel
     onPlayClick: (Song) -> Unit,
     onPauseClick: () -> Unit,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier,
-    ) {
+) {
     Scaffold(
         topBar = {
-            // Barre de titre avec gradient
             CenterAlignedTopAppBar(
                 title = {
                     Row(
@@ -77,7 +72,6 @@ fun AudioPlayerScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Message d'information si aucune chanson
             if (songs.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -90,18 +84,19 @@ fun AudioPlayerScreen(
                     )
                 }
             } else {
-                // Liste des chansons
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                     items(songs) { song ->
+                        val isThisRowPlaying = (song.id == activeSongId) && isServicePlaying
+
                         SongItem(
                             song = song,
-                            isPlaying = song.id == currentPlayingSongId,
+                            isPlaying = isThisRowPlaying, // ✅ uniquement si le service joue ET c'est la chanson active
                             onPlayClick = { onPlayClick(song) },
                             onPauseClick = onPauseClick,
-                            onSongClick = { onSongClick(song)}
+                            onSongClick = { onSongClick(song) }
                         )
                     }
                 }
@@ -109,4 +104,3 @@ fun AudioPlayerScreen(
         }
     }
 }
-

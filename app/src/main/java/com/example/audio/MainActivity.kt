@@ -25,13 +25,16 @@ import com.example.audio.ui.theme.AudioTheme
 
 class MainActivity : ComponentActivity() {
 
-    private var currentPlayingSongId by mutableStateOf<Int?>(null)
     private var receiverRegistered = false
-
     private var selectedSong by mutableStateOf<Song?>(null)
+
+    // état du service
+    private var isServicePlaying by mutableStateOf(false)
+    private var currentIndexFromService by mutableStateOf(-1)
     private var positionMs by mutableStateOf(0)
     private var durationMs by mutableStateOf(0)
 
+    // pour resume
     private var lastSelectedSongId by mutableStateOf<Int?>(null)
 
     private val songs = listOf(
@@ -42,21 +45,22 @@ class MainActivity : ComponentActivity() {
         Song(5, R.raw.song5, "yana ya la2", "Amr Diab", "4:20")
     )
 
+    // ✅ chanson active (chargée dans le service), même si pause
+    private val activeSongId: Int?
+        get() = if (currentIndexFromService in songs.indices) songs[currentIndexFromService].id else null
+
     private val playerStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != AudioPlayerService.ACTION_STATE_CHANGED) return
 
-            val isPlaying = intent.getBooleanExtra(AudioPlayerService.EXTRA_IS_PLAYING, false)
-            val index = intent.getIntExtra(AudioPlayerService.EXTRA_CURRENT_INDEX, -1)
+            isServicePlaying = intent.getBooleanExtra(AudioPlayerService.EXTRA_IS_PLAYING, false)
+            currentIndexFromService = intent.getIntExtra(AudioPlayerService.EXTRA_CURRENT_INDEX, -1)
 
             positionMs = intent.getIntExtra(AudioPlayerService.EXTRA_POSITION_MS, 0)
             durationMs = intent.getIntExtra(AudioPlayerService.EXTRA_DURATION_MS, 0)
 
-            currentPlayingSongId =
-                if (isPlaying && index in songs.indices) songs[index].id else null
-
-            if (index in songs.indices) {
-                lastSelectedSongId = songs[index].id
+            if (currentIndexFromService in songs.indices) {
+                lastSelectedSongId = songs[currentIndexFromService].id
             }
         }
     }
@@ -85,44 +89,43 @@ class MainActivity : ComponentActivity() {
                 if (song == null) {
                     AudioPlayerScreen(
                         songs = songs,
-                        currentPlayingSongId = currentPlayingSongId,
+                        activeSongId = activeSongId,
+                        isServicePlaying = isServicePlaying,
                         onPlayClick = { s ->
                             val sameSongPaused =
-                                (lastSelectedSongId == s.id) &&
-                                        (currentPlayingSongId == null) &&
-                                        (positionMs > 0)
-
+                                (activeSongId == s.id) && (!isServicePlaying) && (positionMs > 0)
                             if (sameSongPaused) resumeCurrent() else playSong(s)
                         },
                         onPauseClick = { pauseSong() },
-                        onSongClick = { s ->
-                            selectedSong = s
-
-                            // ✅ reset affichage si ce n’est pas la chanson en cours
-                            if (currentPlayingSongId != s.id) {
-                                positionMs = 0
-                                durationMs = 0
-                            }
-                        }
+                        onSongClick = { s -> selectedSong = s }
                     )
                 } else {
+
+                    // ✅ la chanson affichée dans Details est-elle la chanson active du service ?
+                    val isThisSongActive = (activeSongId == song.id)
+
                     SongDetailsScreen(
                         song = song,
-                        isPlaying = (currentPlayingSongId == song.id),
-                        positionMs = positionMs,
-                        durationMs = durationMs,
-                        onSeekTo = { newPosMs -> seekTo(newPosMs) },
+
+                        isPlaying = isServicePlaying && isThisSongActive,
+
+                        positionMs = if (isThisSongActive) positionMs else 0,
+                        durationMs = if (isThisSongActive) durationMs else 0,
+
+                        onSeekTo = { newPosMs ->
+                            if (isThisSongActive) seekTo(newPosMs)
+                        },
                         onBack = { selectedSong = null },
 
                         onPlay = {
                             val sameSongPaused =
-                                (lastSelectedSongId == song.id) &&
-                                        (currentPlayingSongId == null) &&
-                                        (positionMs > 0)
+                                (activeSongId == song.id) && (!isServicePlaying) && (positionMs > 0)
 
                             if (sameSongPaused) resumeCurrent() else playSong(song)
                         },
-                        onPause = { pauseSong() },
+                        onPause = {
+                            if (isThisSongActive) pauseSong()
+                        },
 
                         onNext = {
                             val i = songs.indexOfFirst { it.id == song.id }
@@ -164,7 +167,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playSong(song: Song) {
-        // ✅ reset pour éviter d’afficher le time de l’ancienne chanson
+        // reset UI pour éviter flash d'ancien temps
         positionMs = 0
         durationMs = 0
 
@@ -187,7 +190,6 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
 
-        currentPlayingSongId = song.id
         lastSelectedSongId = song.id
     }
 
@@ -203,7 +205,6 @@ class MainActivity : ComponentActivity() {
             action = AudioPlayerService.ACTION_PAUSE
         }
         startService(intent)
-        currentPlayingSongId = null
     }
 
     private fun seekTo(positionMs: Int) {
