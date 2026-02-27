@@ -25,8 +25,8 @@ import com.example.audio.ui.theme.MusicSecondary
 @Composable
 fun AudioPlayerScreen(
     songs: List<Song>,
-    activeSongId: Int?,          // ✅ chanson chargée dans le service (même en pause)
-    isServicePlaying: Boolean,   // ✅ play/pause réel
+    activeSongId: Long?,
+    isServicePlaying: Boolean,
     onPlayClick: (Song) -> Unit,
     onPauseClick: () -> Unit,
     onSongClick: (Song) -> Unit,
@@ -78,7 +78,7 @@ fun AudioPlayerScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Aucune chanson disponible\nAjoutez des fichiers MP3 dans res/raw/",
+                        text = "Aucune chanson trouvée sur votre téléphone.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = Color.White.copy(alpha = 0.6f)
                     )
@@ -93,7 +93,7 @@ fun AudioPlayerScreen(
 
                         SongItem(
                             song = song,
-                            isPlaying = isThisRowPlaying, // ✅ uniquement si le service joue ET c'est la chanson active
+                            isPlaying = isThisRowPlaying,
                             onPlayClick = { onPlayClick(song) },
                             onPauseClick = onPauseClick,
                             onSongClick = { onSongClick(song) }

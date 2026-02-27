@@ -1,13 +1,17 @@
 package com.example.audio.data
 
-/**
- * Modèle de données représentant une chanson
- * Contient toutes les informations nécessaires pour afficher et jouer une chanson
- */
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "songs")
 data class Song(
-    val id: Int,              // Identifiant unique de la chanson
-    val resourceId: Int,      // ID de la ressource audio dans res/raw
-    val title: String,        // Titre de la chanson
-    val artist: String,       // Nom de l'artiste
-    val duration: String      // Durée au format "mm:ss"
+    @PrimaryKey val id: Long,
+    val uri: String,
+    val title: String,
+    val artist: String,
+    val duration: String,
+    val albumArt: String? = null,
+    val isLocal: Boolean = true,
+    val isDownloaded: Boolean = false,
+    val albumName: String? = "Album Inconnu"
 )

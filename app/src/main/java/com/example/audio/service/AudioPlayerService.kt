@@ -6,20 +6,26 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.audio.MainActivity
+
+import android.net.Uri
 
 class AudioPlayerService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var currentSongTitle: String = ""
     private var currentSongArtist: String = ""
-    private var currentResourceId: Int = -1
+    private var currentSongUri: String = ""
 
-    private val playlist = mutableListOf<Int>()
+    private val playlistUris = mutableListOf<String>()
     private val playlistTitles = mutableListOf<String>()
     private val playlistArtists = mutableListOf<String>()
     private var currentSongIndex: Int = 0
@@ -35,10 +41,10 @@ class AudioPlayerService : Service() {
         const val ACTION_PREVIOUS = "ACTION_PREVIOUS"
         const val ACTION_SEEK = "ACTION_SEEK"
 
-        const val EXTRA_SONG_RESOURCE_ID = "EXTRA_SONG_RESOURCE_ID"
+        const val EXTRA_SONG_URI = "EXTRA_SONG_URI"
         const val EXTRA_SONG_TITLE = "EXTRA_SONG_TITLE"
         const val EXTRA_SONG_ARTIST = "EXTRA_SONG_ARTIST"
-        const val EXTRA_PLAYLIST_IDS = "EXTRA_PLAYLIST_IDS"
+        const val EXTRA_PLAYLIST_URIS = "EXTRA_PLAYLIST_URIS"
         const val EXTRA_PLAYLIST_TITLES = "EXTRA_PLAYLIST_TITLES"
         const val EXTRA_PLAYLIST_ARTISTS = "EXTRA_PLAYLIST_ARTISTS"
         const val EXTRA_SONG_INDEX = "EXTRA_SONG_INDEX"
@@ -62,37 +68,40 @@ class AudioPlayerService : Service() {
         when (intent?.action) {
 
             ACTION_PLAY -> {
-                val resourceId = intent.getIntExtra(EXTRA_SONG_RESOURCE_ID, -1)
+                val songUri = intent.getStringExtra(EXTRA_SONG_URI)
 
-                // playlist si fournie
-                val playlistIdsString = intent.getStringExtra(EXTRA_PLAYLIST_IDS)
+                val playlistUrisString = intent.getStringExtra(EXTRA_PLAYLIST_URIS)
                 val playlistTitlesString = intent.getStringExtra(EXTRA_PLAYLIST_TITLES)
                 val playlistArtistsString = intent.getStringExtra(EXTRA_PLAYLIST_ARTISTS)
                 val songIndex = intent.getIntExtra(EXTRA_SONG_INDEX, -1)
 
-                if (!playlistIdsString.isNullOrEmpty()
+                if (!playlistUrisString.isNullOrEmpty()
                     && !playlistTitlesString.isNullOrEmpty()
                     && !playlistArtistsString.isNullOrEmpty()
                     && songIndex >= 0
                 ) {
-                    playlist.clear()
+                    playlistUris.clear()
                     playlistTitles.clear()
                     playlistArtists.clear()
 
-                    playlist.addAll(playlistIdsString.split(",").mapNotNull { it.toIntOrNull() })
+                    playlistUris.addAll(playlistUrisString.split(","))
                     playlistTitles.addAll(playlistTitlesString.split("|"))
                     playlistArtists.addAll(playlistArtistsString.split("|"))
                     currentSongIndex = songIndex
                 }
 
-                // ✅ si resourceId fourni => nouvelle chanson
-                if (resourceId != -1 && resourceId != 0) {
-                    currentSongTitle = intent.getStringExtra(EXTRA_SONG_TITLE) ?: "Chanson"
-                    currentSongArtist = intent.getStringExtra(EXTRA_SONG_ARTIST) ?: "Artiste"
-                    currentResourceId = resourceId
-                    playSong(resourceId)
+                if (!songUri.isNullOrEmpty()) {
+                    // Si c'est une nouvelle URI, on joue.
+                    // Sinon, si c'est la même et qu'on est en pause, on reprend.
+                    if (songUri == currentSongUri && mediaPlayer != null && !mediaPlayer!!.isPlaying) {
+                        resumeSong()
+                    } else {
+                        currentSongTitle = intent.getStringExtra(EXTRA_SONG_TITLE) ?: "Chanson"
+                        currentSongArtist = intent.getStringExtra(EXTRA_SONG_ARTIST) ?: "Artiste"
+                        currentSongUri = songUri
+                        playSong(songUri)
+                    }
                 } else {
-                    // ✅ sinon => resume
                     resumeSong()
                 }
             }
@@ -120,22 +129,60 @@ class AudioPlayerService : Service() {
         return START_STICKY
     }
 
-    private fun playSong(resourceId: Int) {
+    private fun playSong(uri: String) {
+        Log.d("AudioPlayerService", "Tentative de lecture de : $uri")
         try {
             stopProgressUpdates()
             mediaPlayer?.release()
 
-            mediaPlayer = MediaPlayer.create(this, resourceId).apply {
-                setOnCompletionListener { stopSong() }
-                start()
+            startForegroundServiceWithNotification(true)
+
+            mediaPlayer = MediaPlayer().apply {
+                setWakeMode(this@AudioPlayerService, PowerManager.PARTIAL_WAKE_LOCK)
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
+                )
+                
+                setVolume(1.0f, 1.0f)
+
+                if (uri.startsWith("http")) {
+                    setDataSource(uri)
+                } else {
+                    setDataSource(this@AudioPlayerService, Uri.parse(uri))
+                }
+                
+                prepareAsync() 
+                
+                setOnPreparedListener { mp ->
+                    Log.d("AudioPlayerService", "Média préparé, lancement de la lecture")
+                    mp.start()
+                    startForegroundServiceWithNotification(true)
+                    broadcastState(true)
+                    startProgressUpdates()
+                }
+
+                setOnCompletionListener { playNextSong() }
+                
+                setOnErrorListener { mp, what, extra ->
+                    val errorMsg = when (what) {
+                        MediaPlayer.MEDIA_ERROR_SERVER_DIED -> "Erreur serveur"
+                        MediaPlayer.MEDIA_ERROR_UNKNOWN -> "Erreur inconnue"
+                        else -> "Erreur de lecture"
+                    }
+                    Log.e("AudioPlayerService", "Erreur MediaPlayer: $errorMsg (what=$what, extra=$extra)")
+                    broadcastState(false)
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    false
+                }
             }
 
-            startForeground(NOTIFICATION_ID, createNotification(true))
-            broadcastState(true)
-            startProgressUpdates()
-
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("AudioPlayerService", "Erreur lors de playSong", e)
+            broadcastState(false)
+            stopForeground(STOP_FOREGROUND_REMOVE)
         }
     }
 
@@ -144,8 +191,8 @@ class AudioPlayerService : Service() {
             if (mp.isPlaying) {
                 mp.pause()
                 stopProgressUpdates()
-                startForeground(NOTIFICATION_ID, createNotification(false))
-                broadcastState(false) // position fixe
+                startForegroundServiceWithNotification(false)
+                broadcastState(false)
             }
         }
     }
@@ -154,7 +201,7 @@ class AudioPlayerService : Service() {
         mediaPlayer?.let { mp ->
             if (!mp.isPlaying) {
                 mp.start()
-                startForeground(NOTIFICATION_ID, createNotification(true))
+                startForegroundServiceWithNotification(true)
                 broadcastState(true)
                 startProgressUpdates()
             }
@@ -162,25 +209,25 @@ class AudioPlayerService : Service() {
     }
 
     private fun playNextSong() {
-        if (playlist.isEmpty()) return
+        if (playlistUris.isEmpty()) return
 
-        currentSongIndex = (currentSongIndex + 1) % playlist.size
-        currentResourceId = playlist[currentSongIndex]
+        currentSongIndex = (currentSongIndex + 1) % playlistUris.size
+        currentSongUri = playlistUris[currentSongIndex]
         currentSongTitle = playlistTitles.getOrNull(currentSongIndex) ?: "Chanson"
         currentSongArtist = playlistArtists.getOrNull(currentSongIndex) ?: "Artiste"
 
-        playSong(currentResourceId)
+        playSong(currentSongUri)
     }
 
     private fun playPreviousSong() {
-        if (playlist.isEmpty()) return
+        if (playlistUris.isEmpty()) return
 
-        currentSongIndex = if (currentSongIndex - 1 < 0) playlist.size - 1 else currentSongIndex - 1
-        currentResourceId = playlist[currentSongIndex]
+        currentSongIndex = if (currentSongIndex - 1 < 0) playlistUris.size - 1 else currentSongIndex - 1
+        currentSongUri = playlistUris[currentSongIndex]
         currentSongTitle = playlistTitles.getOrNull(currentSongIndex) ?: "Chanson"
         currentSongArtist = playlistArtists.getOrNull(currentSongIndex) ?: "Artiste"
 
-        playSong(currentResourceId)
+        playSong(currentSongUri)
     }
 
     private fun stopSong() {
@@ -194,6 +241,19 @@ class AudioPlayerService : Service() {
         mediaPlayer = null
         broadcastState(false)
         stopForeground(STOP_FOREGROUND_REMOVE)
+    }
+
+    private fun startForegroundServiceWithNotification(isPlaying: Boolean) {
+        val notification = createNotification(isPlaying)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun createNotificationChannel() {
@@ -268,13 +328,29 @@ class AudioPlayerService : Service() {
 
     private fun broadcastState(isPlaying: Boolean) {
         val mp = mediaPlayer
-        val intent = Intent(ACTION_STATE_CHANGED).apply {
-            putExtra(EXTRA_IS_PLAYING, isPlaying)
-            putExtra(EXTRA_CURRENT_INDEX, currentSongIndex)
-            putExtra(EXTRA_POSITION_MS, mp?.currentPosition ?: 0)
-            putExtra(EXTRA_DURATION_MS, mp?.duration ?: 0)
+        try {
+            val position = if (mp != null && isMediaPlayerInValidState(mp)) mp.currentPosition else 0
+            val duration = if (mp != null && isMediaPlayerInValidState(mp)) mp.duration else 0
+            
+            val intent = Intent(ACTION_STATE_CHANGED).apply {
+                putExtra(EXTRA_IS_PLAYING, isPlaying)
+                putExtra(EXTRA_CURRENT_INDEX, currentSongIndex)
+                putExtra(EXTRA_POSITION_MS, position)
+                putExtra(EXTRA_DURATION_MS, duration)
+            }
+            sendBroadcast(intent)
+        } catch (e: Exception) {
+            Log.e("AudioPlayerService", "Erreur lors du broadcastState", e)
         }
-        sendBroadcast(intent)
+    }
+
+    private fun isMediaPlayerInValidState(mp: MediaPlayer): Boolean {
+        return try {
+            mp.currentPosition
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun startProgressUpdates() {

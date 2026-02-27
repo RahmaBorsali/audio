@@ -16,28 +16,28 @@ import androidx.compose.ui.platform.LocalContext
 private val DarkColorScheme = darkColorScheme(
     primary = MusicPrimary,
     secondary = MusicSecondary,
-    tertiary = MusicAccent,
+    tertiary = MusicPrimary,
     background = MusicBackground,
     surface = MusicSurface,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
-    onBackground = Color(0xFFE2E8F0),
-    onSurface = Color(0xFFE2E8F0)
+    onBackground = Color.White,
+    onSurface = Color.White
 )
 
 // Schéma de couleurs pour le thème clair (optionnel, on privilégie le mode sombre)
 private val LightColorScheme = lightColorScheme(
     primary = MusicPrimary,
     secondary = MusicSecondary,
-    tertiary = MusicAccent,
-    background = Color(0xFFF8FAFC),
-    surface = Color.White,
+    tertiary = MusicPrimary,
+    background = Color.Black,
+    surface = Color.Black,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
-    onBackground = Color(0xFF1E293B),
-    onSurface = Color(0xFF1E293B)
+    onBackground = Color.White,
+    onSurface = Color.White
 )
 
 @Composable
